@@ -19,14 +19,18 @@ function stripV(tag: string): string {
   return tag.startsWith("v") ? tag.slice(1) : tag;
 }
 
+function authHeaders() {
+  const token = Deno.env.get("LORU_GITHUB_TOKEN") ?? Deno.env.get("GITHUB_TOKEN");
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
+}
+
 async function listTags(repo: string): Promise<string[]> {
   const tags: string[] = [];
   let page = 1;
-  const token = Deno.env.get("GITHUB_TOKEN") ?? Deno.env.get("GH_TOKEN");
 
   while (true) {
     const res = await fetch(`https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: authHeaders(),
     });
     if (!res.ok) break;
     const data = (await res.json()) as Array<{ name: string }>;

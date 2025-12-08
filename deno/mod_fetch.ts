@@ -65,7 +65,7 @@ async function discoverMetaFile(startDir = Deno.cwd()): Promise<string | undefin
 async function listTags(repo: string): Promise<string[]> {
   const tags: string[] = [];
   let page = 1;
-  const token = Deno.env.get("GITHUB_TOKEN") ?? Deno.env.get("GH_TOKEN");
+  const token = Deno.env.get("LORU_GITHUB_TOKEN") ?? Deno.env.get("GITHUB_TOKEN") ?? Deno.env.get("GH_TOKEN");
 
   while (true) {
     const res = await fetch(`https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}`, {
@@ -101,13 +101,18 @@ async function resolveVersion(range: string, repo: string): Promise<string | und
   return latest ? semver.format(latest) : undefined;
 }
 
+function authHeaders() {
+  const token = Deno.env.get("LORU_GITHUB_TOKEN") ?? Deno.env.get("GITHUB_TOKEN");
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
+}
+
 async function fetchSchemaFile(repo: string, version: string, schema: SchemaKind): Promise<string> {
   const urls = [
     `https://raw.githubusercontent.com/${repo}/v${version}/definitions/${schema}.json`,
     `https://raw.githubusercontent.com/${repo}/main/definitions/${schema}.json`,
   ];
   for (const url of urls) {
-    const res = await fetch(url);
+    const res = await fetch(url, { headers: authHeaders() });
     if (res.ok) return await res.text();
   }
   throw new Error(`Failed to fetch schema ${schema} (version ${version}) from ${repo}`);
