@@ -13,7 +13,10 @@ export interface FetchOptions {
 }
 
 const DEFAULT_VERSION = "0.1.0";
-const DEFAULT_CACHE = ".loru/cache/schemas";
+const DEFAULT_CACHE = (() => {
+  const base = Deno.env.get("LORU_CACHE_DIR") ?? Deno.dir("cache") ?? ".loru/cache";
+  return join(base, "loru", "schemas");
+})();
 const DEFAULT_REPO = "hiisi-digital/loru-schemas";
 
 async function fileExists(path: string): Promise<boolean> {

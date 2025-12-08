@@ -2,7 +2,10 @@ import { join } from "https://deno.land/std@0.208.0/path/mod.ts";
 import * as semver from "https://deno.land/std@0.208.0/semver/mod.ts";
 import { parse as parseToml } from "https://deno.land/std@0.208.0/toml/mod.ts";
 
-const DEFAULT_CACHE = ".loru/cache/boms";
+const DEFAULT_CACHE = (() => {
+  const base = Deno.env.get("LORU_CACHE_DIR") ?? Deno.dir("cache") ?? ".loru/cache";
+  return join(base, "loru", "boms");
+})();
 const DEFAULT_REPO = "hiisi-digital/loru-devkit";
 
 async function fileExists(path: string): Promise<boolean> {
