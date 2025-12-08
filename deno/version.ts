@@ -34,3 +34,35 @@ export async function readCargoVersion(path: string): Promise<string | undefined
     return undefined;
   }
 }
+
+export async function setCargoVersion(path: string, version: string): Promise<void> {
+  const text = await Deno.readTextFile(path);
+  const parsed = parseToml(text) as any;
+  if (!parsed.package) parsed.package = {};
+  parsed.package.version = version;
+  const out = tomlStringify(parsed);
+  await Deno.writeTextFile(path, out);
+}
+
+export async function setJsonVersion(file: string, version: string): Promise<void> {
+  const raw = await Deno.readTextFile(file);
+  const json = JSON.parse(raw) as { version?: string };
+  json.version = version;
+  await Deno.writeTextFile(file, JSON.stringify(json, null, 2) + "\n");
+}
+
+function tomlStringify(obj: Record<string, unknown>): string {
+  // minimal TOML writer for package.version updates
+  let out = "";
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === "object" && v && !Array.isArray(v)) {
+      out += `[${k}]\n`;
+      for (const [ck, cv] of Object.entries(v as Record<string, unknown>)) {
+        out += `${ck} = "${cv}"\n`;
+      }
+    } else {
+      out += `${k} = "${v}"\n`;
+    }
+  }
+  return out;
+}
