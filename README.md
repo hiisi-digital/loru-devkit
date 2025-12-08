@@ -3,7 +3,7 @@
 Utilities for Loru tooling and metadata:
 
 - Schema fetcher with semver range resolution and caching
-- BOM (bill of materials) utilities (planned)
+- BOM (bill of materials) fetcher with caching
 - Shared helpers for plugins, tenants, and platform tooling
 
 ## Using the schema fetcher
@@ -31,7 +31,21 @@ Options:
 
 The fetcher resolves semver ranges against tags in `loru-schemas`, caches the schema locally, and prints the cached path.
 
+## BOM fetcher
+
+```bash
+deno run -A https://raw.githubusercontent.com/hiisi-digital/loru-devkit/main/deno/fetch_bom.ts \
+  --version=^0.1.0 \
+  --cache-dir=.loru/cache/boms
+```
+
+Options:
+- `--version`: platform/BOM version or semver range (default: latest tag)
+- `--cache-dir`: cache location (default `.loru/cache/boms`)
+- `--repo`: devkit repo (default `hiisi-digital/loru-devkit`)
+
+The BOM maps platform release to compatible component ranges (schemas, templates, libs).
+
 ## TODO
-- BOM helpers (resolve platform version compatibility)
 - Package distribution via GitHub tags (consume raw URLs pinned to tags)
 - CI workflows for publishing tagged snapshots

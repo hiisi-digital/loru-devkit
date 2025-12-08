@@ -1,0 +1,9 @@
+{
+  "platform": "^0.1.0",
+  "schemas": "^0.1.0",
+  "plugin_template": "^0.1.0",
+  "tenant_template": "^0.1.0",
+  "core": "^0.1.0",
+  "forms": "^0.1.0",
+  "ui": "^0.1.0"
+}
