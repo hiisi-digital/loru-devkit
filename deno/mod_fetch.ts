@@ -1,6 +1,7 @@
 import { dirname, join } from "https://deno.land/std@0.208.0/path/mod.ts";
 import { parse as parseToml } from "https://deno.land/std@0.208.0/toml/mod.ts";
 import * as semver from "https://deno.land/std@0.208.0/semver/mod.ts";
+import { SCHEMA_CACHE_DIR } from "./constants.ts";
 
 export type SchemaKind = "plugin-metadata" | "tenant-metadata";
 
@@ -13,10 +14,7 @@ export interface FetchOptions {
 }
 
 const DEFAULT_VERSION = "0.1.0";
-const DEFAULT_CACHE = (() => {
-  const base = Deno.env.get("LORU_CACHE_DIR") ?? Deno.dir("cache") ?? ".loru/cache";
-  return join(base, "loru", "schemas");
-})();
+const DEFAULT_CACHE = SCHEMA_CACHE_DIR;
 const DEFAULT_REPO = "hiisi-digital/loru-schemas";
 
 async function fileExists(path: string): Promise<boolean> {

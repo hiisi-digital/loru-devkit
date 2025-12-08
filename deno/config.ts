@@ -1,36 +1,8 @@
 import { dirname, join, resolve } from "https://deno.land/std@0.208.0/path/mod.ts";
 import { parse as parseToml } from "https://deno.land/std@0.208.0/toml/mod.ts";
 import { fileExists } from "./fs.ts";
-
-export interface MetaConfig {
-  schema_version?: string;
-}
-
-export interface PluginEntry {
-  id?: string;
-  name?: string;
-  path?: string;
-  entrypoint?: string;
-  schema_version?: string;
-}
-
-export interface PageEntry {
-  id?: string;
-  name?: string;
-  path?: string;
-  entrypoint?: string;
-  schema_version?: string;
-  domains?: string[];
-  locales?: string[];
-}
-
-export interface LoruConfig {
-  meta?: MetaConfig;
-  plugin?: PluginEntry[];
-  page?: PageEntry[];
-}
-
-const CONFIG_FILES = ["loru.toml", ".loru/loru.toml"];
+import { CONFIG_FILES } from "./constants.ts";
+import { LoruConfig } from "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.2.0/typescript/mod.ts";
 
 export async function findConfig(startDir = Deno.cwd()): Promise<string | undefined> {
   let dir = startDir;
