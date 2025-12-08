@@ -6,4 +6,5 @@ export type { ProjectInfo, ProjectKind } from "./project.ts";
 export { loadConfig, findConfig, resolveMetaFile } from "./config.ts";
 export type { LoruConfig, PluginEntry, PageEntry, MetaConfig } from "./config.ts";
 export { fileExists } from "./fs.ts";
+export { bumpVersion, bumpJsonVersion, readCargoVersion } from "./version.ts";
 export * from "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/main/typescript/mod.ts";
