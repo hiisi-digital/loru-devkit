@@ -1,19 +1,43 @@
-import { dirname, join } from "https://deno.land/std@0.208.0/path/mod.ts";
-import { collectWorkspaceConfigs } from "./workspace.ts";
+import { join } from "https://deno.land/std@0.208.0/path/mod.ts";
+import * as semver from "https://deno.land/std@0.208.0/semver/mod.ts";
+import { collectWorkspaceConfigs, WorkspaceConfig } from "./workspace.ts";
 import { loadEnvFiles } from "./env.ts";
 import { bumpVersion, setJsonVersion, readCargoVersion, setCargoVersion } from "./version.ts";
 import { fileExists } from "./fs.ts";
-import { SCHEMA_CACHE_DIR } from "./constants.ts";
+import { LoruConfig } from "@loru/schemas";
 
 type Level = "patch" | "minor" | "major";
+type ManifestKind = "deno" | "rust";
 
 interface Manifest {
-  kind: "deno" | "rust";
+  kind: ManifestKind;
   path: string;
-  version?: string;
+  version: string;
 }
 
-async function run(cmd: string, cwd: string) {
+interface Entry {
+  kind: "plugin" | "page" | "lib";
+  id: string;
+  name: string;
+  baseDir: string;
+  path: string;
+  manifest?: Manifest;
+  publish?: string;
+}
+
+interface PendingAction {
+  entry: Pick<Entry, "kind" | "id">;
+  version: string;
+  tag: string;
+  changelog: string;
+  publish?: string;
+  commit: string;
+  path: string;
+}
+
+const STATE_PATH = ".loru/cache/bump-state.json";
+
+async function run(cmd: string, cwd = Deno.cwd()) {
   const proc = new Deno.Command(Deno.env.get("SHELL") ?? "sh", {
     args: ["-c", cmd],
     cwd,
@@ -25,120 +49,289 @@ async function run(cmd: string, cwd: string) {
   if (code !== 0) throw new Error(`Command failed: ${cmd} (cwd=${cwd})`);
 }
 
+async function capture(cmd: string, cwd = Deno.cwd()): Promise<string> {
+  const proc = new Deno.Command(Deno.env.get("SHELL") ?? "sh", {
+    args: ["-c", cmd],
+    cwd,
+    stdin: "null",
+    stdout: "piped",
+    stderr: "null",
+  });
+  const { code, stdout } = await proc.output();
+  if (code !== 0) return "";
+  return new TextDecoder().decode(stdout).trim();
+}
+
+function tagPrefix(entry: Entry): string {
+  return `loru-${entry.kind}-${entry.id}`;
+}
+
+function tagName(entry: Entry, version: string): string {
+  return `${tagPrefix(entry)}-v${version}`;
+}
+
+async function lastEntryTag(entry: Entry): Promise<{ tag: string; version: string } | undefined> {
+  const prefix = tagPrefix(entry);
+  const tagsRaw = await capture(`git tag --list "${prefix}-v*"`);
+  const tags = tagsRaw
+    .split("\n")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => {
+      const version = t.replace(`${prefix}-v`, "");
+      return { tag: t, version: semver.parse(version) };
+    })
+    .filter((t) => t.version)
+    .sort((a, b) => semver.compare(a.version!, b.version!));
+  const latest = tags.at(-1);
+  return latest ? { tag: latest.tag, version: semver.format(latest.version!) } : undefined;
+}
+
+async function hasChangesSince(tag: string | undefined, targetPath: string): Promise<boolean> {
+  if (!tag) return true;
+  const proc = new Deno.Command("git", { args: ["diff", "--quiet", `${tag}..HEAD`, "--", targetPath], stdin: "null" });
+  const out = await proc.output();
+  return out.code !== 0;
+}
+
 async function readDenoVersion(path: string): Promise<string | undefined> {
-  if (!(await fileExists(path))) return undefined;
   try {
     const raw = await Deno.readTextFile(path);
     const json = JSON.parse(raw) as { version?: string };
-    return json.version;
+    return typeof json.version === "string" ? json.version : undefined;
   } catch {
     return undefined;
   }
 }
 
-async function gatherManifests(baseDir: string): Promise<Manifest[]> {
-  const manifests: Manifest[] = [];
-  const denoPath = join(baseDir, "deno.json");
-  const denoJsonc = join(baseDir, "deno.jsonc");
-  if (await fileExists(denoPath)) manifests.push({ kind: "deno", path: denoPath, version: await readDenoVersion(denoPath) });
-  else if (await fileExists(denoJsonc)) manifests.push({ kind: "deno", path: denoJsonc, version: await readDenoVersion(denoJsonc) });
+async function detectManifest(entryPath: string): Promise<Manifest | undefined> {
+  const denoJson = join(entryPath, "deno.json");
+  const denoJsonc = join(entryPath, "deno.jsonc");
+  const cargoToml = join(entryPath, "Cargo.toml");
 
-  const cargoPath = join(baseDir, "Cargo.toml");
-  if (await fileExists(cargoPath)) manifests.push({ kind: "rust", path: cargoPath, version: await readCargoVersion(cargoPath) });
-
-  return manifests;
+  if (await fileExists(denoJson)) {
+    const version = (await readDenoVersion(denoJson)) ?? "0.0.0";
+    return { kind: "deno", path: denoJson, version };
+  }
+  if (await fileExists(denoJsonc)) {
+    const version = (await readDenoVersion(denoJsonc)) ?? "0.0.0";
+    return { kind: "deno", path: denoJsonc, version };
+  }
+  if (await fileExists(cargoToml)) {
+    const version = (await readCargoVersion(cargoToml)) ?? "0.0.0";
+    return { kind: "rust", path: cargoToml, version };
+  }
+  return undefined;
 }
 
-async function lastTag(): Promise<string | undefined> {
-  const proc = new Deno.Command("git", { args: ["describe", "--tags", "--abbrev=0"], stdin: "null", stdout: "piped", stderr: "null" });
-  const out = await proc.output();
-  if (out.code !== 0) return undefined;
-  return new TextDecoder().decode(out.stdout).trim();
+function buildEntryList(configs: WorkspaceConfig[]): Entry[] {
+  const entries: Entry[] = [];
+  for (const cfg of configs) {
+    for (const plugin of cfg.config.plugin ?? []) {
+      entries.push({
+        kind: "plugin",
+        id: plugin.id,
+        name: plugin.name,
+        baseDir: cfg.baseDir,
+        path: join(cfg.baseDir, plugin.path ?? "."),
+      });
+    }
+    for (const page of cfg.config.page ?? []) {
+      entries.push({
+        kind: "page",
+        id: page.id,
+        name: page.name,
+        baseDir: cfg.baseDir,
+        path: join(cfg.baseDir, page.path ?? "."),
+      });
+    }
+    for (const lib of cfg.config.lib ?? []) {
+      entries.push({
+        kind: "lib",
+        id: lib.name,
+        name: lib.name,
+        baseDir: cfg.baseDir,
+        path: join(cfg.baseDir, lib.path),
+        publish: lib.publish,
+      });
+    }
+  }
+  return entries;
 }
 
-async function hasChangesSince(tag: string | undefined, path: string): Promise<boolean> {
-  if (!tag) return true;
-  const proc = new Deno.Command("git", { args: ["diff", "--quiet", `${tag}..HEAD`, "--", path], stdin: "null" });
-  const out = await proc.output();
-  return out.code !== 0;
-}
-
-async function writeChangelog(version: string): Promise<string> {
-  const tag = await lastTag();
-  const range = tag ? `${tag}..HEAD` : "HEAD";
-  const proc = new Deno.Command("git", { args: ["log", range, "--oneline"], stdout: "piped" });
-  const out = await proc.output();
-  const log = new TextDecoder().decode(out.stdout);
-  const dir = join(".loru", "changelog");
+async function writeChangelog(entry: Entry, version: string, since?: string): Promise<string> {
+  const range = since ? `${since}..HEAD` : "HEAD";
+  const log = await capture(`git log ${range} --oneline -- "${entry.path}"`);
+  const dir = join(entry.baseDir, ".loru", "changelog");
   await Deno.mkdir(dir, { recursive: true });
-  const path = join(dir, `${version}.md`);
-  const body = `# Changelog ${version}\n\n${log}\n`;
+  const path = join(dir, `${tagPrefix(entry)}-v${version}.md`);
+  const body = `# ${entry.name} v${version}\n\n${log || "No commits recorded."}\n`;
   await Deno.writeTextFile(path, body);
   return path;
 }
 
-async function createRelease(version: string, changelogPath: string) {
+async function createRelease(tag: string, changelog: string) {
   const token = Deno.env.get("LORU_GITHUB_TOKEN") ?? Deno.env.get("GITHUB_TOKEN");
-  if (!token) {
-    throw new Error("Missing LORU_GITHUB_TOKEN/GITHUB_TOKEN for GitHub release");
-  }
-  await run(`GITHUB_TOKEN=${token} gh release create v${version} -F ${changelogPath} -t v${version}`, Deno.cwd());
+  if (!token) throw new Error("Missing LORU_GITHUB_TOKEN/GITHUB_TOKEN for GitHub release");
+  await run(`GITHUB_TOKEN=${token} gh release create ${tag} -F ${JSON.stringify(changelog)} -t ${tag}`);
 }
 
-async function publishLibs(version: string, baseDir: string) {
-  const cfgs = await collectWorkspaceConfigs(baseDir);
-  for (const cfg of cfgs) {
-    for (const lib of cfg.config.lib ?? []) {
-      if (!lib.publish) continue;
-      const libPath = join(cfg.baseDir, lib.path);
-      if (lib.publish === "jsr" && lib.kind === "deno") {
-        const token = Deno.env.get("LORU_JSR_TOKEN");
-        if (!token) throw new Error("Missing LORU_JSR_TOKEN for jsr publish");
-        await run(`DENO_AUTH_TOKENS=${token} deno publish`, libPath);
-      } else if (lib.publish === "crates.io" && lib.kind === "rust") {
-        const token = Deno.env.get("LORU_CRATES_IO_TOKEN");
-        if (!token) throw new Error("Missing LORU_CRATES_IO_TOKEN for crates.io publish");
-        await run(`cargo publish --token ${token}`, libPath);
+async function publishLib(entry: Entry, version: string) {
+  if (!entry.publish) return;
+  if (entry.publish === "jsr" && entry.kind === "lib") {
+    const token = Deno.env.get("LORU_JSR_TOKEN");
+    if (!token) throw new Error("Missing LORU_JSR_TOKEN for jsr publish");
+    await run(`DENO_AUTH_TOKENS=${token} deno publish`, entry.path);
+  } else if (entry.publish === "crates.io" && entry.kind === "lib") {
+    const token = Deno.env.get("LORU_CRATES_IO_TOKEN");
+    if (!token) throw new Error("Missing LORU_CRATES_IO_TOKEN for crates.io publish");
+    await run(`cargo publish --token ${token}`, entry.path);
+  }
+}
+
+function loadState(): PendingAction[] {
+  try {
+    const text = Deno.readTextFileSync(join(Deno.cwd(), STATE_PATH));
+    const parsed = JSON.parse(text) as PendingAction[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveState(pending: PendingAction[]) {
+  const statePath = join(Deno.cwd(), STATE_PATH);
+  Deno.mkdirSync(join(Deno.cwd(), ".loru", "cache"), { recursive: true });
+  Deno.writeTextFileSync(statePath, JSON.stringify(pending, null, 2));
+}
+
+async function resumePending(): Promise<void> {
+  const pending = loadState();
+  if (!pending.length) return;
+
+  const remaining: PendingAction[] = [];
+  for (const item of pending) {
+    try {
+      await createRelease(item.tag, item.changelog);
+      if (item.publish) {
+        const fakeEntry: Entry = {
+          kind: item.entry.kind,
+          id: item.entry.id,
+          name: item.entry.id,
+          baseDir: item.path,
+          path: item.path,
+          publish: item.publish,
+        };
+        await publishLib(fakeEntry, item.version);
       }
+    } catch (_err) {
+      remaining.push(item);
     }
+  }
+
+  if (remaining.length) {
+    saveState(remaining);
+    console.warn(`Pending bump actions remain (${remaining.length}); rerun after providing tokens.`);
+  } else {
+    try {
+      Deno.removeSync(join(Deno.cwd(), STATE_PATH));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+async function updateManifest(manifest: Manifest, next: string) {
+  if (manifest.kind === "deno") {
+    await setJsonVersion(manifest.path, next);
+  } else if (manifest.kind === "rust") {
+    await setCargoVersion(manifest.path, next);
   }
 }
 
 export async function bumpAndRelease(level: Level): Promise<void> {
   loadEnvFiles();
-  await run("git stash push -u -m loru-bump-temp", Deno.cwd());
+  await resumePending();
+  let stashed = false;
 
-  const configs = await collectWorkspaceConfigs();
-  if (!configs.length) throw new Error("No loru.toml found");
+  try {
+    await run("git stash push -u -m loru-bump-temp");
+    stashed = true;
 
-  const tag = await lastTag();
-  const manifests = await gatherManifests(Deno.cwd());
-  if (!manifests.length) throw new Error("No manifests found to bump");
+    const configs = await collectWorkspaceConfigs();
+    if (!configs.length) throw new Error("No loru.toml found");
 
-  const changed = await hasChangesSince(tag, ".");
-  if (!changed) {
-    console.log("No changes since last tag; nothing to bump.");
-    await run("git stash pop || true", Deno.cwd());
-    return;
+    const entries = buildEntryList(configs);
+    const work: Array<{
+      entry: Entry;
+      manifest: Manifest;
+      next: string;
+      changelog: string;
+      tag?: string;
+    }> = [];
+
+    for (const entry of entries) {
+      const manifest = entry.manifest ?? (await detectManifest(entry.path));
+      if (!manifest) continue;
+      entry.manifest = manifest;
+
+      const last = await lastEntryTag(entry);
+      const changed = await hasChangesSince(last?.tag, entry.path);
+      if (!changed) continue;
+
+      const next = bumpVersion(manifest.version ?? "0.0.0", level);
+      await updateManifest(manifest, next);
+      const changelog = await writeChangelog(entry, next, last?.tag);
+      work.push({ entry, manifest, next, changelog, tag: last?.tag });
+    }
+
+    if (!work.length) {
+      console.log("No entries changed since last release.");
+      await run("git stash pop || true");
+      stashed = false;
+      return;
+    }
+
+    const files = work.flatMap((w) => [w.manifest.path, w.changelog]);
+    await run(`git add ${files.map((f) => JSON.stringify(f)).join(" ")}`);
+    const message = `chore: release ${work.map((w) => `${w.entry.id}@v${w.next}`).join(", ")}`;
+    await run(`git commit -m ${JSON.stringify(message)}`);
+
+    const tags = work.map((w) => ({ entry: w.entry, tag: tagName(w.entry, w.next), changelog: w.changelog, version: w.next }));
+    for (const t of tags) {
+      await run(`git tag ${t.tag}`);
+    }
+
+    await run("git push");
+    for (const t of tags) {
+      await run(`git push origin ${t.tag}`);
+    }
+
+    const pending: PendingAction[] = [];
+    for (const t of tags) {
+      try {
+        await createRelease(t.tag, t.changelog);
+        await publishLib(t.entry, t.version);
+      } catch (_err) {
+        pending.push({
+          entry: { kind: t.entry.kind, id: t.entry.id },
+          version: t.version,
+          tag: t.tag,
+          changelog: t.changelog,
+          publish: t.entry.publish,
+          commit: await capture("git rev-parse HEAD"),
+          path: t.entry.path,
+        });
+      }
+    }
+
+    if (pending.length) {
+      saveState(pending);
+      throw new Error(`Some release steps deferred (${pending.length}). Provide tokens and rerun bump.`);
+    }
+  } finally {
+    if (stashed) {
+      await run("git stash pop || true");
+    }
   }
-
-  const current = manifests.find((m) => m.version)?.version ?? "0.0.0";
-  const next = bumpVersion(current, level);
-
-  for (const m of manifests) {
-    if (m.kind === "deno") await setJsonVersion(m.path, next);
-    if (m.kind === "rust") await setCargoVersion(m.path, next);
-  }
-
-  const changelog = await writeChangelog(next);
-  await run(`git add ${manifests.map((m) => m.path).join(" ")} ${changelog}`, Deno.cwd());
-  await run(`git commit -m \"chore: release v${next}\"`, Deno.cwd());
-  await run(`git tag v${next}`, Deno.cwd());
-  await run("git push", Deno.cwd());
-  await run(`git push origin v${next}`, Deno.cwd());
-
-  await createRelease(next, changelog);
-  await publishLibs(next, Deno.cwd());
-
-  await run("git stash pop || true", Deno.cwd());
 }

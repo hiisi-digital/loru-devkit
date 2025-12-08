@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+if [ "${SKIP_LORU_HOOKS}" = "1" ]; then
+  exit 0
+fi
+if command -v loru >/dev/null 2>&1; then
+  loru dev check
+else
+  deno run -A --config="/Users/orgrinrt/Dev/Web/loru/loru-cli/deno.json" "/Users/orgrinrt/Dev/Web/loru/loru-cli/main.ts" dev check
+fi

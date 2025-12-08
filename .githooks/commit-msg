@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+msg_file="$1"
+msg="$(cat "$msg_file")"
+conventional='^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\([^)]*\))?: .+'
+if ! printf "%s" "$msg" | grep -Eq "$conventional"; then
+  echo "❌ Commit message must follow Conventional Commits (type(scope): summary)" >&2
+  exit 1
+fi

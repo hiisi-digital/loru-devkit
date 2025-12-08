@@ -6,13 +6,10 @@ const args = parse(Deno.args, {
   string: ["schema", "version", "meta-file", "cache-dir", "repo"],
 });
 
-if (!args.schema || (args.schema !== "plugin-metadata" && args.schema !== "tenant-metadata")) {
-  console.error("Usage: fetch_schema.ts --schema=plugin-metadata|tenant-metadata [--version=semver|range] [--meta-file=path] [--cache-dir=.loru/cache/schemas] [--repo=owner/repo]");
-  Deno.exit(1);
-}
+const schema = (args.schema as string | undefined) ?? "loru-config";
 
 const schemaPath = await fetchSchema({
-  schema: args.schema,
+  schema,
   version: args.version,
   metaFile: args["meta-file"],
   cacheDir: args["cache-dir"],

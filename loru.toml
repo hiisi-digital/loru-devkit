@@ -1,0 +1,29 @@
+[meta]
+schema_version = "0.3.0"
+
+[[lib]]
+name = "@loru/devkit"
+path = "."
+kind = "deno"
+
+[[task]]
+name = "fmt"
+cmd = "deno fmt"
+
+[[task]]
+name = "lint"
+cmd = "deno lint"
+
+[[task]]
+name = "check"
+cmd = "deno fmt --check && deno lint"
+
+[[task]]
+name = "fetch-schema"
+description = "Cache the loru-config schema locally"
+cmd = "deno run -A deno/fetch_schema.ts --schema=loru-config --cache-dir=.loru/cache/schemas"
+
+[[task]]
+name = "fetch-bom"
+description = "Cache the bill of materials"
+cmd = "deno run -A deno/fetch_bom.ts --cache-dir=.loru/cache/boms"

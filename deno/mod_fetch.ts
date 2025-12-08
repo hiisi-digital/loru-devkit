@@ -1,9 +1,9 @@
 import { dirname, join } from "https://deno.land/std@0.208.0/path/mod.ts";
 import { parse as parseToml } from "https://deno.land/std@0.208.0/toml/mod.ts";
 import * as semver from "https://deno.land/std@0.208.0/semver/mod.ts";
-import { SCHEMA_CACHE_DIR } from "./constants.ts";
+import { CONFIG_FILES, SCHEMA_CACHE_DIR } from "./constants.ts";
 
-export type SchemaKind = "plugin-metadata" | "tenant-metadata";
+export type SchemaKind = "loru-config";
 
 export interface FetchOptions {
   schema: SchemaKind;
@@ -13,7 +13,7 @@ export interface FetchOptions {
   repo?: string; // default hiisi-digital/loru-schemas
 }
 
-const DEFAULT_VERSION = "0.1.0";
+const DEFAULT_VERSION = "0.3.0";
 const DEFAULT_CACHE = SCHEMA_CACHE_DIR;
 const DEFAULT_REPO = "hiisi-digital/loru-schemas";
 
@@ -35,17 +35,29 @@ async function readSchemaVersion(metaPath?: string): Promise<string | undefined>
   try {
     const text = await Deno.readTextFile(metaPath);
     const parsed = parseToml(text) as Record<string, unknown>;
-    const version = parsed["schema_version"];
-    return typeof version === "string" ? version : undefined;
+    const direct = parsed["schema_version"];
+    if (typeof direct === "string") return direct;
+    const meta = parsed["meta"];
+    if (meta && typeof meta === "object" && !Array.isArray(meta)) {
+      const nested = (meta as Record<string, unknown>)["schema_version"];
+      if (typeof nested === "string") return nested;
+    }
+    return undefined;
   } catch {
     return undefined;
   }
 }
 
-async function discoverMetaFile(): Promise<string | undefined> {
-  const candidates = ["plugin.toml", "tenant.toml", ".loru/plugin.toml", ".loru/tenant.toml"];
-  for (const path of candidates) {
-    if (await fileExists(path)) return path;
+async function discoverMetaFile(startDir = Deno.cwd()): Promise<string | undefined> {
+  let dir = startDir;
+  while (true) {
+    for (const candidate of CONFIG_FILES) {
+      const p = join(dir, candidate);
+      if (await fileExists(p)) return p;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
   }
   return undefined;
 }
@@ -71,16 +83,22 @@ async function listTags(repo: string): Promise<string[]> {
 async function resolveVersion(range: string, repo: string): Promise<string | undefined> {
   // exact version shortcut
   if (!semver.isSemVer(range) && !semver.parseRange(range)) return undefined;
-  const tags = (await listTags(repo)).map(stripV).filter(semver.isSemVer);
-  if (!tags.length) return undefined;
+  const versions = (await listTags(repo))
+    .map(stripV)
+    .map((t) => semver.parse(t))
+    .filter((v): v is semver.SemVer => Boolean(v));
+  if (!versions.length) return undefined;
 
-  if (semver.isSemVer(range) && tags.includes(range)) return range;
+  if (semver.isSemVer(range)) {
+    const exact = versions.find((v) => semver.format(v) === range);
+    if (exact) return semver.format(exact);
+  }
 
-  const parsedRange = semver.parseRange(range);
-  if (!parsedRange) return undefined;
-
-  const matches = tags.filter((t) => parsedRange(semver.parse(t)!)).sort(semver.compare);
-  return matches.at(-1); // highest matching
+  const parsed = semver.parseRange(range);
+  if (!parsed) return undefined;
+  const matches = versions.filter((v) => semver.testRange(v, parsed)).sort(semver.compare);
+  const latest = matches.at(-1);
+  return latest ? semver.format(latest) : undefined;
 }
 
 async function fetchSchemaFile(repo: string, version: string, schema: SchemaKind): Promise<string> {

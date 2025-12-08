@@ -1,6 +1,6 @@
-import { LoruConfig } from "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.2.1/typescript/mod.ts";
+import { LoruConfig, LoruConfigTaskItem, LoruConfigBuildItem } from "@loru/schemas";
 
-type PlatformKey = "windows" | "darwin" | "linux";
+type PlatformKey = "windows" | "darwin" | "linux" | "win";
 
 function currentPlatform(): PlatformKey {
   const os = Deno.build.os;
@@ -15,17 +15,58 @@ export interface ResolvedTask {
   cwd: string;
 }
 
+export interface ResolvedBuildTask extends ResolvedTask {
+  phase: string;
+  targets?: string[];
+}
+
+function selectCmd(
+  task: { cmd?: string; platform?: Record<string, unknown> },
+  platform: PlatformKey,
+): string | undefined {
+  const override = task.platform?.[platform];
+  if (override && typeof override === "object" && !Array.isArray(override)) {
+    const cmd = (override as Record<string, unknown>).cmd;
+    if (typeof cmd === "string") return cmd;
+  }
+  return task.cmd;
+}
+
 export function resolveTasks(cfg: LoruConfig, baseDir: string, name: string): ResolvedTask[] {
-  const tasks = cfg.task ?? [];
-  const matches = tasks.filter((t) => t.name === name);
+  const tasks = (cfg.task ?? []) as LoruConfigTaskItem[];
   const platform = currentPlatform();
+  const matches = tasks.filter((t) => t.name === name);
   const resolved: ResolvedTask[] = [];
-  for (const t of matches) {
-    let cmd = t.cmd;
-    const platformCmd = t.platform?.[platform]?.cmd;
-    if (platformCmd) cmd = platformCmd;
+  for (const task of matches) {
+    const cmd = selectCmd(task, platform);
     if (!cmd) continue;
-    resolved.push({ name: t.name!, cmd, cwd: baseDir });
+    resolved.push({ name: task.name, cmd, cwd: baseDir });
+  }
+  return resolved;
+}
+
+export function resolveBuildTasks(
+  cfg: LoruConfig,
+  baseDir: string,
+  phase: string,
+  target?: string,
+  targetPath?: string,
+): ResolvedBuildTask[] {
+  const build = (cfg.build ?? []) as LoruConfigBuildItem[];
+  const platform = currentPlatform();
+  const resolved: ResolvedBuildTask[] = [];
+  for (const task of build) {
+    if (task.phase !== phase) continue;
+    if (task.targets && target && !task.targets.includes(target)) continue;
+    const cmd = selectCmd(task, platform);
+    if (!cmd) continue;
+    resolved.push({
+      name: task.name ?? task.phase,
+      cmd,
+      cwd: targetPath ?? baseDir,
+      phase: task.phase,
+      targets: task.targets,
+    });
   }
   return resolved;
 }

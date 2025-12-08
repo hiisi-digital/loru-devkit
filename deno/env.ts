@@ -1,4 +1,4 @@
-import { configSync } from "std/dotenv/mod.ts";
+import { loadSync } from "std/dotenv/mod.ts";
 import { dirname, join } from "https://deno.land/std@0.208.0/path/mod.ts";
 
 export function loadEnvFiles(startDir = Deno.cwd()): void {
@@ -8,7 +8,7 @@ export function loadEnvFiles(startDir = Deno.cwd()): void {
     const envPath = join(dir, ".env");
     if (!visited.has(envPath)) {
       try {
-        configSync({ path: envPath, export: true });
+        loadSync({ envPath, export: true });
       } catch {
         // ignore missing/parse errors
       }

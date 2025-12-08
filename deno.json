@@ -1,6 +1,6 @@
 {
   "name": "@loru/devkit",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "exports": {
     ".": "./deno/mod.ts"
   },
@@ -8,11 +8,11 @@
     "fetch:schema": "deno run -A deno/fetch_schema.ts"
   },
   "imports": {
-    "std/path": "https://deno.land/std@0.208.0/path/mod.ts",
-    "std/flags": "https://deno.land/std@0.208.0/flags/mod.ts",
-    "std/semver": "https://deno.land/std@0.208.0/semver/mod.ts",
-    "std/toml": "https://deno.land/std@0.208.0/toml/mod.ts",
-    "std/dotenv": "https://deno.land/std@0.208.0/dotenv/mod.ts"
+    "std/": "https://deno.land/std@0.208.0/",
+    "@loru/schemas": "../loru-schemas/typescript/mod.ts"
+  },
+  "lock": {
+    "path": ".loru/deno.lock"
   },
   "lint": {
     "rules": {

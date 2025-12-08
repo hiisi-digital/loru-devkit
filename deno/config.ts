@@ -1,8 +1,8 @@
-import { dirname, join, resolve } from "https://deno.land/std@0.208.0/path/mod.ts";
+import { dirname, join } from "https://deno.land/std@0.208.0/path/mod.ts";
 import { parse as parseToml } from "https://deno.land/std@0.208.0/toml/mod.ts";
 import { fileExists } from "./fs.ts";
 import { CONFIG_FILES } from "./constants.ts";
-import { LoruConfig } from "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.2.2/typescript/mod.ts";
+import { LoruConfig } from "@loru/schemas";
 import { loadEnvFiles } from "./env.ts";
 
 export async function findConfig(startDir = Deno.cwd()): Promise<string | undefined> {
@@ -29,7 +29,4 @@ export async function loadConfig(path?: string, startDir = Deno.cwd()): Promise<
   return { path: cfgPath, baseDir, config: parsed };
 }
 
-export function resolveMetaFile(baseDir: string, entryPath: string | undefined, kind: "plugin" | "tenant"): string {
-  const file = kind === "plugin" ? "plugin.toml" : "tenant.toml";
-  return entryPath ? resolve(baseDir, entryPath, file) : resolve(baseDir, file);
-}
+export type { LoruConfig };
