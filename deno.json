@@ -1,0 +1,25 @@
+{
+  "name": "@loru/devkit",
+  "version": "0.1.0",
+  "exports": {
+    ".": "./deno/mod.ts"
+  },
+  "tasks": {
+    "fetch:schema": "deno run -A deno/fetch_schema.ts"
+  },
+  "imports": {
+    "std/path": "https://deno.land/std@0.208.0/path/mod.ts",
+    "std/flags": "https://deno.land/std@0.208.0/flags/mod.ts",
+    "std/semver": "https://deno.land/std@0.208.0/semver/mod.ts",
+    "std/toml": "https://deno.land/std@0.208.0/toml/mod.ts"
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "fmt": {
+    "indentWidth": 2,
+    "singleQuote": false
+  }
+}
