@@ -2,7 +2,8 @@ import { dirname, join, resolve } from "https://deno.land/std@0.208.0/path/mod.t
 import { parse as parseToml } from "https://deno.land/std@0.208.0/toml/mod.ts";
 import { fileExists } from "./fs.ts";
 import { CONFIG_FILES } from "./constants.ts";
-import { LoruConfig } from "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.2.0/typescript/mod.ts";
+import { LoruConfig } from "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.2.2/typescript/mod.ts";
+import { loadEnvFiles } from "./env.ts";
 
 export async function findConfig(startDir = Deno.cwd()): Promise<string | undefined> {
   let dir = startDir;
@@ -19,6 +20,7 @@ export async function findConfig(startDir = Deno.cwd()): Promise<string | undefi
 }
 
 export async function loadConfig(path?: string, startDir = Deno.cwd()): Promise<{ path?: string; baseDir: string; config?: LoruConfig }> {
+  loadEnvFiles(startDir);
   const cfgPath = path ?? (await findConfig(startDir));
   const baseDir = cfgPath ? dirname(cfgPath) : Deno.cwd();
   if (!cfgPath) return { baseDir };
