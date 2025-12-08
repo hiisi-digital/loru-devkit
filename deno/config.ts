@@ -18,8 +18,8 @@ export async function findConfig(startDir = Deno.cwd()): Promise<string | undefi
   return undefined;
 }
 
-export async function loadConfig(path?: string): Promise<{ path?: string; baseDir: string; config?: LoruConfig }> {
-  const cfgPath = path ?? (await findConfig());
+export async function loadConfig(path?: string, startDir = Deno.cwd()): Promise<{ path?: string; baseDir: string; config?: LoruConfig }> {
+  const cfgPath = path ?? (await findConfig(startDir));
   const baseDir = cfgPath ? dirname(cfgPath) : Deno.cwd();
   if (!cfgPath) return { baseDir };
   const text = await Deno.readTextFile(cfgPath);
