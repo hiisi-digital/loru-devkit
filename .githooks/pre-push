@@ -2,6 +2,10 @@
 if [ "${SKIP_LORU_HOOKS}" = "1" ]; then
   exit 0
 fi
+token="${LORU_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}"
+if [ -n "$token" ]; then
+  export DENO_AUTH_TOKENS="$token@raw.githubusercontent.com"
+fi
 if command -v loru >/dev/null 2>&1; then
   loru dev check
 else
