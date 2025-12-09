@@ -10,17 +10,25 @@ async function collectEnvVars(startDir: string, stopDir?: string): Promise<Recor
   const seen = new Set<string>();
   let dir = startDir;
   while (true) {
-    for await (const entry of Deno.readDir(dir)) {
-      if (!entry.isFile || !entry.name.startsWith(".env")) continue;
-      const envPath = join(dir, entry.name);
-      if (seen.has(envPath)) continue;
-      try {
-        const parsed = loadSync({ envPath, export: false }) as Record<string, string>;
-        Object.assign(env, parsed);
-      } catch {
-        // ignore parse errors
+    try {
+      for await (const entry of Deno.readDir(dir)) {
+        if (!entry.isFile || !entry.name.startsWith(".env")) continue;
+        const envPath = join(dir, entry.name);
+        if (seen.has(envPath)) continue;
+        try {
+          const parsed = loadSync({ envPath, export: false }) as Record<string, string>;
+          Object.assign(env, parsed);
+        } catch {
+          // ignore parse errors
+        }
+        seen.add(envPath);
       }
-      seen.add(envPath);
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) {
+        // Stop walking upward if the current directory doesn't exist.
+        break;
+      }
+      throw err;
     }
     if (stopDir && dir === stopDir) break;
     const parent = dirname(dir);
