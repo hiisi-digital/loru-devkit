@@ -9,7 +9,7 @@
   },
   "imports": {
     "std/": "https://deno.land/std@0.208.0/",
-    "@loru/schemas": "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.3.3/typescript/mod.ts"
+    "@loru/schemas": "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.3.4/typescript/mod.ts"
   },
   "lock": {
     "path": ".loru/deno.lock"

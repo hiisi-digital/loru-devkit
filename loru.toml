@@ -1,5 +1,5 @@
 [meta]
-schema_version = "0.3.2"
+schema_version = "0.3.4"
 
 [[lib]]
 name = "@loru/devkit"

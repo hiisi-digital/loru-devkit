@@ -160,6 +160,7 @@
     "https://deno.land/std@0.208.0/toml/parse.ts": "e900bafdf35d802519842a303e07a62ea5282186960b3474e8083509ab1c7f0d",
     "https://deno.land/std@0.208.0/toml/stringify.ts": "be8c9182353f80234cf296ca26d4e605b4672e35a2aa0648cc942b5605d4bc1d",
     "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.3.2/typescript/mod.ts": "94f954e9c2c61be9f1bd6d1ebcf6e50fe132b1104c15a04d467950cb0e4a13e9",
-    "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.3.3/typescript/mod.ts": "94f954e9c2c61be9f1bd6d1ebcf6e50fe132b1104c15a04d467950cb0e4a13e9"
+    "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.3.3/typescript/mod.ts": "94f954e9c2c61be9f1bd6d1ebcf6e50fe132b1104c15a04d467950cb0e4a13e9",
+    "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.3.4/typescript/mod.ts": "362c20d96172fde45238d00fb120eb7791898f17be64f1644d8b1c5f2321c8ee"
   }
 }

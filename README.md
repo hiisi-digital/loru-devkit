@@ -12,7 +12,7 @@ Utilities for Loru tooling and metadata:
 
 ```bash
 # Fetch loru-config schema (reads schema_version from loru.toml)
-deno run -A https://raw.githubusercontent.com/hiisi-digital/loru-devkit/v0.3.4/deno/fetch_schema.ts \
+deno run -A https://raw.githubusercontent.com/hiisi-digital/loru-devkit/v0.3.5/deno/fetch_schema.ts \
   --schema=loru-config \
   --meta-file=loru.toml \
   --cache-dir=.loru/cache/schemas
