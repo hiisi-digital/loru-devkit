@@ -5,7 +5,10 @@ import type { LoruConfig } from "@loru/schemas";
 
 type Tool = "deno" | "cargo" | "generic";
 
-async function collectEnvVars(startDir: string, stopDir?: string): Promise<Record<string, string>> {
+async function collectEnvVars(
+  startDir: string,
+  stopDir?: string,
+): Promise<Record<string, string>> {
   const env: Record<string, string> = {};
   const seen = new Set<string>();
   let dir = startDir;
@@ -16,7 +19,10 @@ async function collectEnvVars(startDir: string, stopDir?: string): Promise<Recor
         const envPath = join(dir, entry.name);
         if (seen.has(envPath)) continue;
         try {
-          const parsed = loadSync({ envPath, export: false }) as Record<string, string>;
+          const parsed = loadSync({ envPath, export: false }) as Record<
+            string,
+            string
+          >;
           Object.assign(env, parsed);
         } catch {
           // ignore parse errors
@@ -52,11 +58,22 @@ export interface EnvOptions {
  * Resolve environment for a command: loads .env* from project upward to root (no siblings),
  * merges with process env, adds Loru artifact vars, and maps tool-specific dirs.
  */
-export async function resolveCommandEnv(opts: EnvOptions): Promise<Record<string, string>> {
+export async function resolveCommandEnv(
+  opts: EnvOptions,
+): Promise<Record<string, string>> {
   const base = Deno.env.toObject();
-  const loaded = await collectEnvVars(opts.startDir ?? opts.projectRoot, opts.projectRoot);
+  const loaded = await collectEnvVars(
+    opts.startDir ?? opts.projectRoot,
+    opts.projectRoot,
+  );
   const tool = opts.tool ?? "generic";
-  const artifacts = await resolveArtifacts(opts.cfg, opts.workspaceRoot, opts.projectRoot, tool, opts.target);
+  const artifacts = await resolveArtifacts(
+    opts.cfg,
+    opts.workspaceRoot,
+    opts.projectRoot,
+    tool,
+    opts.target,
+  );
 
   const mapped: Record<string, string> = {
     LORU_WORKSPACE_PATH: opts.workspaceRoot,
@@ -76,7 +93,10 @@ export async function resolveCommandEnv(opts: EnvOptions): Promise<Record<string
 
 export { collectEnvVars };
 
-export async function loadEnvFiles(startDir = Deno.cwd(), stopDir?: string): Promise<Record<string, string>> {
+export async function loadEnvFiles(
+  startDir = Deno.cwd(),
+  stopDir?: string,
+): Promise<Record<string, string>> {
   const loaded = await collectEnvVars(startDir, stopDir ?? startDir);
   for (const [k, v] of Object.entries(loaded)) {
     Deno.env.set(k, v);

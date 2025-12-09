@@ -13,7 +13,7 @@ export interface FetchOptions {
   repo?: string; // default hiisi-digital/loru-schemas
 }
 
-const DEFAULT_VERSION = "0.3.4";
+const DEFAULT_VERSION = "0.3.3";
 const DEFAULT_CACHE = SCHEMA_CACHE_DIR;
 const DEFAULT_REPO = "hiisi-digital/loru-schemas";
 
@@ -28,6 +28,14 @@ async function fileExists(path: string): Promise<boolean> {
 
 function stripV(tag: string): string {
   return tag.startsWith("v") ? tag.slice(1) : tag;
+}
+
+function safeParse(tag: string): semver.SemVer | undefined {
+  try {
+    return semver.parse(tag);
+  } catch {
+    return undefined;
+  }
 }
 
 async function readSchemaVersion(
@@ -96,7 +104,7 @@ async function resolveVersion(
   if (!semver.isSemVer(range) && !semver.parseRange(range)) return undefined;
   const versions = (await listTags(repo))
     .map(stripV)
-    .map((t) => semver.parse(t))
+    .map((t) => safeParse(t))
     .filter((v): v is semver.SemVer => Boolean(v));
   if (!versions.length) return undefined;
 

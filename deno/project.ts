@@ -24,7 +24,11 @@ export async function detectProject(path: string): Promise<ProjectInfo> {
   const cargoToml = join(path, "Cargo.toml");
 
   if (await fileExists(denoJson) || await fileExists(denoJsonc)) {
-    return { path, kind: "deno", version: await readDenoVersion(denoJsonc, denoJson) };
+    return {
+      path,
+      kind: "deno",
+      version: await readDenoVersion(denoJsonc, denoJson),
+    };
   }
   if (await fileExists(cargoToml)) {
     return { path, kind: "rust", version: await readCargoVersion(cargoToml) };
@@ -32,7 +36,9 @@ export async function detectProject(path: string): Promise<ProjectInfo> {
   return { path, kind: "unknown" };
 }
 
-async function readDenoVersion(...candidates: string[]): Promise<string | undefined> {
+async function readDenoVersion(
+  ...candidates: string[]
+): Promise<string | undefined> {
   for (const file of candidates) {
     if (await fileExists(file)) {
       try {

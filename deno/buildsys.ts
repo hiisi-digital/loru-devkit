@@ -1,5 +1,4 @@
 import { join, relative } from "https://deno.land/std@0.208.0/path/mod.ts";
-import { parse as parseToml } from "https://deno.land/std@0.208.0/toml/mod.ts";
 import { collectWorkspaceConfigs } from "./workspace.ts";
 import { fileExists } from "./fs.ts";
 import { writeUserConfig } from "./user_config.ts";
@@ -15,21 +14,6 @@ function parseJsonc(text: string): Record<string, unknown> {
     const stripped = text.replace(/\/\*.*?\*\/|\/\/.*(?=[\n\r])/gs, "");
     return JSON.parse(stripped) as Record<string, unknown>;
   }
-}
-
-function stringifyToml(obj: Record<string, unknown>): string {
-  let out = "";
-  for (const [k, v] of Object.entries(obj)) {
-    if (typeof v === "object" && v && !Array.isArray(v)) {
-      out += `[${k}]\n`;
-      for (const [ck, cv] of Object.entries(v as Record<string, unknown>)) {
-        out += `${ck} = "${cv}"\n`;
-      }
-    } else {
-      out += `${k} = "${v}"\n`;
-    }
-  }
-  return out;
 }
 
 async function updateDenoConfig(projectDir: string, root: string) {
@@ -48,7 +32,7 @@ async function updateDenoConfig(projectDir: string, root: string) {
   }
 }
 
-async function updateCargoConfig(projectDir: string, root: string) {
+async function updateCargoConfig(projectDir: string, _root: string) {
   const cargoPath = join(projectDir, "Cargo.toml");
   if (!(await fileExists(cargoPath))) return;
   // No longer mutating Cargo.toml for target-dir; rely on env (CARGO_TARGET_DIR) when running commands.
@@ -60,7 +44,8 @@ export async function initBuildSystem(startDir = Deno.cwd()) {
   const root = configs[0].baseDir;
 
   const defaultArtifacts = (() => {
-    const stateHome = Deno.env.get("XDG_STATE_HOME") ?? join(Deno.env.get("HOME") ?? ".", ".local", "state");
+    const stateHome = Deno.env.get("XDG_STATE_HOME") ??
+      join(Deno.env.get("HOME") ?? ".", ".local", "state");
     return join(stateHome, "loru", "artifacts");
   })();
   await writeUserConfig({ artifacts_path: defaultArtifacts });
@@ -68,9 +53,15 @@ export async function initBuildSystem(startDir = Deno.cwd()) {
   for (const cfg of configs) {
     const candidateDirs = new Set<string>();
     candidateDirs.add(cfg.baseDir);
-    for (const lib of cfg.config.lib ?? []) candidateDirs.add(join(cfg.baseDir, lib.path));
-    for (const plugin of cfg.config.plugin ?? []) candidateDirs.add(join(cfg.baseDir, plugin.path ?? "."));
-    for (const page of cfg.config.page ?? []) candidateDirs.add(join(cfg.baseDir, page.path ?? "."));
+    for (const lib of cfg.config.lib ?? []) {
+      candidateDirs.add(join(cfg.baseDir, lib.path));
+    }
+    for (const plugin of cfg.config.plugin ?? []) {
+      candidateDirs.add(join(cfg.baseDir, plugin.path ?? "."));
+    }
+    for (const page of cfg.config.page ?? []) {
+      candidateDirs.add(join(cfg.baseDir, page.path ?? "."));
+    }
 
     for (const dir of candidateDirs) {
       await updateDenoConfig(dir, root);

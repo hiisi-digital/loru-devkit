@@ -9,7 +9,6 @@ import {
   setJsonVersion,
 } from "./version.ts";
 import { fileExists } from "./fs.ts";
-import { LoruConfig } from "@loru/schemas";
 
 type Level = "patch" | "minor" | "major";
 interface BumpOptions {
@@ -226,7 +225,7 @@ async function createRelease(tag: string, changelog: string) {
   );
 }
 
-async function publishLib(entry: Entry, version: string) {
+async function publishLib(entry: Entry) {
   if (!entry.publish) return;
   if (entry.publish === "jsr" && entry.kind === "lib") {
     const token = Deno.env.get("LORU_JSR_TOKEN");
@@ -295,7 +294,7 @@ async function resumePending(): Promise<void> {
           path: item.path,
           publish: item.publish,
         };
-        await publishLib(fakeEntry, item.version);
+        await publishLib(fakeEntry);
       }
     } catch (_err) {
       remaining.push(item);
@@ -399,7 +398,7 @@ export async function bumpAndRelease(
           await run(`git tag ${tag}`);
           await run(`git push origin ${tag}`);
           await createRelease(tag, changelog);
-          await publishLib(m.entry, m.manifest.version ?? "0.0.0");
+          await publishLib(m.entry);
         } catch (_err) {
           pending.push({
             entry: { kind: m.entry.kind, id: m.entry.id },
@@ -449,7 +448,7 @@ export async function bumpAndRelease(
     for (const t of tags) {
       try {
         await createRelease(t.tag, t.changelog);
-        await publishLib(t.entry, t.version);
+        await publishLib(t.entry);
       } catch (_err) {
         pending.push({
           entry: { kind: t.entry.kind, id: t.entry.id },
@@ -520,7 +519,7 @@ export async function resumeReleases(opts: BumpOptions = {}): Promise<void> {
       await run(`git tag ${tag}`);
       await run(`git push origin ${tag}`);
       await createRelease(tag, changelog);
-      await publishLib(m.entry, version);
+      await publishLib(m.entry);
     } catch (_err) {
       pending.push({
         entry: { kind: m.entry.kind, id: m.entry.id },

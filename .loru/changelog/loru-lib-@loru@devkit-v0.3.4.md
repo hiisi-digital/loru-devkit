@@ -1,4 +1,4 @@
-# @loru/devkit v0.3.5
+# @loru/devkit v0.3.4
 
 17deb18 feat: harden bump flow and add tests e4acd94 chore: release v0.3.3
 4f024e1 fix: tolerate missing env directories 99c158a feat: env resolution and

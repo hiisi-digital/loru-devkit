@@ -1,7 +1,6 @@
 import { join } from "https://deno.land/std@0.208.0/path/mod.ts";
 import * as semver from "https://deno.land/std@0.208.0/semver/mod.ts";
 import { BOM_CACHE_DIR } from "./constants.ts";
-import { parse as parseToml } from "https://deno.land/std@0.208.0/toml/mod.ts";
 
 const DEFAULT_CACHE = BOM_CACHE_DIR;
 const DEFAULT_REPO = "hiisi-digital/loru-devkit";
@@ -20,7 +19,8 @@ function stripV(tag: string): string {
 }
 
 function authHeaders() {
-  const token = Deno.env.get("LORU_GITHUB_TOKEN") ?? Deno.env.get("GITHUB_TOKEN");
+  const token = Deno.env.get("LORU_GITHUB_TOKEN") ??
+    Deno.env.get("GITHUB_TOKEN");
   return token ? { Authorization: `Bearer ${token}` } : undefined;
 }
 
@@ -29,9 +29,12 @@ async function listTags(repo: string): Promise<string[]> {
   let page = 1;
 
   while (true) {
-    const res = await fetch(`https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}`, {
-      headers: authHeaders(),
-    });
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}`,
+      {
+        headers: authHeaders(),
+      },
+    );
     if (!res.ok) break;
     const data = (await res.json()) as Array<{ name: string }>;
     if (!data.length) break;
@@ -47,7 +50,10 @@ function parseTags(tags: string[]): semver.SemVer[] {
     .filter((v): v is semver.SemVer => Boolean(v));
 }
 
-async function resolveVersion(range: string, repo: string): Promise<string | undefined> {
+async function resolveVersion(
+  range: string,
+  repo: string,
+): Promise<string | undefined> {
   const versions = parseTags((await listTags(repo)).map(stripV));
   if (!versions.length) return undefined;
   if (semver.isSemVer(range)) {
@@ -56,7 +62,9 @@ async function resolveVersion(range: string, repo: string): Promise<string | und
   }
   const parsedRange = semver.parseRange(range);
   if (!parsedRange) return undefined;
-  const matches = versions.filter((v) => semver.testRange(v, parsedRange)).sort(semver.compare);
+  const matches = versions.filter((v) => semver.testRange(v, parsedRange)).sort(
+    semver.compare,
+  );
   const latest = matches.at(-1);
   return latest ? semver.format(latest) : undefined;
 }
@@ -72,10 +80,10 @@ export async function fetchBom(opts: FetchBomOptions = {}): Promise<string> {
   const cacheDir = opts.cacheDir ?? DEFAULT_CACHE;
   const tags = parseTags((await listTags(repo)).map(stripV));
   const latest = [...tags].sort(semver.compare).at(-1);
-  const versionOrRange = opts.version ?? (latest ? semver.format(latest) : "0.1.0");
+  const versionOrRange = opts.version ??
+    (latest ? semver.format(latest) : "0.1.0");
 
-  const resolved =
-    (await resolveVersion(versionOrRange, repo)) ??
+  const resolved = (await resolveVersion(versionOrRange, repo)) ??
     (semver.isSemVer(versionOrRange) ? versionOrRange : undefined) ??
     (latest ? semver.format(latest) : "0.1.0");
 

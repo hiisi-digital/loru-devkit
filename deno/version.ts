@@ -4,7 +4,9 @@ export type BumpLevel = "patch" | "minor" | "major";
 
 export function bumpVersion(current: string, level: BumpLevel): string {
   const [maj, min, pat] = current.split(".").map((n) => parseInt(n, 10));
-  if ([maj, min, pat].some((n) => Number.isNaN(n))) throw new Error(`Invalid version: ${current}`);
+  if ([maj, min, pat].some((n) => Number.isNaN(n))) {
+    throw new Error(`Invalid version: ${current}`);
+  }
   switch (level) {
     case "patch":
       return `${maj}.${min}.${pat + 1}`;
@@ -15,7 +17,10 @@ export function bumpVersion(current: string, level: BumpLevel): string {
   }
 }
 
-export async function bumpJsonVersion(file: string, level: BumpLevel): Promise<string> {
+export async function bumpJsonVersion(
+  file: string,
+  level: BumpLevel,
+): Promise<string> {
   const raw = await Deno.readTextFile(file);
   const json = JSON.parse(raw) as { version?: string };
   const next = bumpVersion(json.version ?? "0.0.0", level);
@@ -24,7 +29,9 @@ export async function bumpJsonVersion(file: string, level: BumpLevel): Promise<s
   return next;
 }
 
-export async function readCargoVersion(path: string): Promise<string | undefined> {
+export async function readCargoVersion(
+  path: string,
+): Promise<string | undefined> {
   try {
     const text = await Deno.readTextFile(path);
     const parsed = parseToml(text) as { package?: { version?: string } };
@@ -35,16 +42,24 @@ export async function readCargoVersion(path: string): Promise<string | undefined
   }
 }
 
-export async function setCargoVersion(path: string, version: string): Promise<void> {
+export async function setCargoVersion(
+  path: string,
+  version: string,
+): Promise<void> {
   const text = await Deno.readTextFile(path);
-  const parsed = parseToml(text) as any;
-  if (!parsed.package) parsed.package = {};
-  parsed.package.version = version;
+  const parsed = parseToml(text) as Record<string, unknown>;
+  const pkg = (parsed.package ??
+    {}) as Record<string, unknown>;
+  pkg.version = version;
+  parsed.package = pkg;
   const out = tomlStringify(parsed);
   await Deno.writeTextFile(path, out);
 }
 
-export async function setJsonVersion(file: string, version: string): Promise<void> {
+export async function setJsonVersion(
+  file: string,
+  version: string,
+): Promise<void> {
   const raw = await Deno.readTextFile(file);
   const json = JSON.parse(raw) as { version?: string };
   json.version = version;

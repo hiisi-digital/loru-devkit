@@ -5,7 +5,9 @@ import { CONFIG_FILES } from "./constants.ts";
 import { LoruConfig } from "@loru/schemas";
 import { loadEnvFiles } from "./env.ts";
 
-export async function findConfig(startDir = Deno.cwd()): Promise<string | undefined> {
+export async function findConfig(
+  startDir = Deno.cwd(),
+): Promise<string | undefined> {
   let dir = startDir;
   while (true) {
     for (const cfg of CONFIG_FILES) {
@@ -19,7 +21,10 @@ export async function findConfig(startDir = Deno.cwd()): Promise<string | undefi
   return undefined;
 }
 
-export async function loadConfig(path?: string, startDir = Deno.cwd()): Promise<{ path?: string; baseDir: string; config?: LoruConfig }> {
+export async function loadConfig(
+  path?: string,
+  startDir = Deno.cwd(),
+): Promise<{ path?: string; baseDir: string; config?: LoruConfig }> {
   await loadEnvFiles(startDir);
   const cfgPath = path ?? (await findConfig(startDir));
   const baseDir = cfgPath ? dirname(cfgPath) : Deno.cwd();

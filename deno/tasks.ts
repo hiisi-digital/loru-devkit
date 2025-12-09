@@ -1,10 +1,10 @@
 import {
   LoruConfig,
-  LoruConfigTaskItem,
   LoruConfigBuild,
   LoruConfigBuildTaskItem,
   LoruConfigCheck,
   LoruConfigCheckTaskItem,
+  LoruConfigTaskItem,
 } from "@loru/schemas";
 
 type PlatformKey = "windows" | "darwin" | "linux" | "win";
@@ -44,7 +44,11 @@ function selectCmd(
   return task.cmd;
 }
 
-export function resolveTasks(cfg: LoruConfig, baseDir: string, name: string): ResolvedTask[] {
+export function resolveTasks(
+  cfg: LoruConfig,
+  baseDir: string,
+  name: string,
+): ResolvedTask[] {
   const tasks = (cfg.task ?? []) as LoruConfigTaskItem[];
   const platform = currentPlatform();
   const matches = tasks.filter((t) => t.name === name);
