@@ -1,6 +1,6 @@
 {
   "name": "@loru/devkit",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "exports": {
     ".": "./deno/mod.ts"
   },
@@ -16,7 +16,9 @@
   },
   "lint": {
     "rules": {
-      "tags": ["recommended"]
+      "tags": [
+        "recommended"
+      ]
     }
   },
   "fmt": {

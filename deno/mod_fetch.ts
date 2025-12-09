@@ -13,7 +13,7 @@ export interface FetchOptions {
   repo?: string; // default hiisi-digital/loru-schemas
 }
 
-const DEFAULT_VERSION = "0.3.2";
+const DEFAULT_VERSION = "0.3.3";
 const DEFAULT_CACHE = SCHEMA_CACHE_DIR;
 const DEFAULT_REPO = "hiisi-digital/loru-schemas";
 
