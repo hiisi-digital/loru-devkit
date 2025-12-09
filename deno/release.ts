@@ -2,7 +2,12 @@ import { join } from "https://deno.land/std@0.208.0/path/mod.ts";
 import * as semver from "https://deno.land/std@0.208.0/semver/mod.ts";
 import { collectWorkspaceConfigs, WorkspaceConfig } from "./workspace.ts";
 import { loadEnvFiles } from "./env.ts";
-import { bumpVersion, setJsonVersion, readCargoVersion, setCargoVersion } from "./version.ts";
+import {
+  bumpVersion,
+  readCargoVersion,
+  setCargoVersion,
+  setJsonVersion,
+} from "./version.ts";
 import { fileExists } from "./fs.ts";
 import { LoruConfig } from "@loru/schemas";
 
@@ -69,11 +74,27 @@ function tagPrefix(entry: Entry): string {
   return `loru-${entry.kind}-${entry.id}`;
 }
 
+function pathSafeId(id: string): string {
+  return id.replaceAll("/", "@").replaceAll("\\", "@");
+}
+
+function tagPrefixFs(entry: Entry): string {
+  return `loru-${entry.kind}-${pathSafeId(entry.id)}`;
+}
+
+function changelogPath(entry: Entry, version: string): string {
+  const dir = join(entry.baseDir, ".loru", "changelog");
+  const file = join(dir, `${tagPrefixFs(entry)}-v${version}.md`);
+  return file;
+}
+
 function tagName(entry: Entry, version: string): string {
   return `${tagPrefix(entry)}-v${version}`;
 }
 
-async function lastEntryTag(entry: Entry): Promise<{ tag: string; version: string } | undefined> {
+async function lastEntryTag(
+  entry: Entry,
+): Promise<{ tag: string; version: string } | undefined> {
   const prefix = tagPrefix(entry);
   const tagsRaw = await capture(`git tag --list "${prefix}-v*"`);
   const tags = tagsRaw
@@ -87,12 +108,20 @@ async function lastEntryTag(entry: Entry): Promise<{ tag: string; version: strin
     .filter((t) => t.version)
     .sort((a, b) => semver.compare(a.version!, b.version!));
   const latest = tags.at(-1);
-  return latest ? { tag: latest.tag, version: semver.format(latest.version!) } : undefined;
+  return latest
+    ? { tag: latest.tag, version: semver.format(latest.version!) }
+    : undefined;
 }
 
-async function hasChangesSince(tag: string | undefined, targetPath: string): Promise<boolean> {
+async function hasChangesSince(
+  tag: string | undefined,
+  targetPath: string,
+): Promise<boolean> {
   if (!tag) return true;
-  const proc = new Deno.Command("git", { args: ["diff", "--quiet", `${tag}..HEAD`, "--", targetPath], stdin: "null" });
+  const proc = new Deno.Command("git", {
+    args: ["diff", "--quiet", `${tag}..HEAD`, "--", targetPath],
+    stdin: "null",
+  });
   const out = await proc.output();
   return out.code !== 0;
 }
@@ -107,7 +136,9 @@ async function readDenoVersion(path: string): Promise<string | undefined> {
   }
 }
 
-async function detectManifest(entryPath: string): Promise<Manifest | undefined> {
+async function detectManifest(
+  entryPath: string,
+): Promise<Manifest | undefined> {
   const denoJson = join(entryPath, "deno.json");
   const denoJsonc = join(entryPath, "deno.jsonc");
   const cargoToml = join(entryPath, "Cargo.toml");
@@ -162,21 +193,37 @@ function buildEntryList(configs: WorkspaceConfig[]): Entry[] {
   return entries;
 }
 
-async function writeChangelog(entry: Entry, version: string, since?: string): Promise<string> {
+async function writeChangelog(
+  entry: Entry,
+  version: string,
+  since?: string,
+): Promise<string> {
   const range = since ? `${since}..HEAD` : "HEAD";
   const log = await capture(`git log ${range} --oneline -- "${entry.path}"`);
-  const dir = join(entry.baseDir, ".loru", "changelog");
-  await Deno.mkdir(dir, { recursive: true });
-  const path = join(dir, `${tagPrefix(entry)}-v${version}.md`);
-  const body = `# ${entry.name} v${version}\n\n${log || "No commits recorded."}\n`;
+  const path = changelogPath(entry, version);
+  await Deno.mkdir(join(entry.baseDir, ".loru", "changelog"), {
+    recursive: true,
+  });
+  const body = `# ${entry.name} v${version}\n\n${
+    log || "No commits recorded."
+  }\n`;
   await Deno.writeTextFile(path, body);
   return path;
 }
 
 async function createRelease(tag: string, changelog: string) {
-  const token = Deno.env.get("LORU_GITHUB_TOKEN") ?? Deno.env.get("GITHUB_TOKEN");
-  if (!token) throw new Error("Missing LORU_GITHUB_TOKEN/GITHUB_TOKEN for GitHub release");
-  await run(`GITHUB_TOKEN=${token} gh release create ${tag} -F ${JSON.stringify(changelog)} -t ${tag}`);
+  const token = Deno.env.get("LORU_GITHUB_TOKEN") ??
+    Deno.env.get("GITHUB_TOKEN");
+  if (!token) {
+    throw new Error(
+      "Missing LORU_GITHUB_TOKEN/GITHUB_TOKEN for GitHub release",
+    );
+  }
+  await run(
+    `GITHUB_TOKEN=${token} gh release create ${tag} -F ${
+      JSON.stringify(changelog)
+    } -t ${tag}`,
+  );
 }
 
 async function publishLib(entry: Entry, version: string) {
@@ -187,7 +234,9 @@ async function publishLib(entry: Entry, version: string) {
     await run(`DENO_AUTH_TOKENS=${token} deno publish`, entry.path);
   } else if (entry.publish === "crates.io" && entry.kind === "lib") {
     const token = Deno.env.get("LORU_CRATES_IO_TOKEN");
-    if (!token) throw new Error("Missing LORU_CRATES_IO_TOKEN for crates.io publish");
+    if (!token) {
+      throw new Error("Missing LORU_CRATES_IO_TOKEN for crates.io publish");
+    }
     await run(`cargo publish --token ${token}`, entry.path);
   }
 }
@@ -206,6 +255,27 @@ function saveState(pending: PendingAction[]) {
   const statePath = join(Deno.cwd(), STATE_PATH);
   Deno.mkdirSync(join(Deno.cwd(), ".loru", "cache"), { recursive: true });
   Deno.writeTextFileSync(statePath, JSON.stringify(pending, null, 2));
+}
+
+async function pushStash(marker = "loru-bump-temp"): Promise<string | null> {
+  const before = await capture(`git stash list --format="%gd:%gs"`);
+  const beforeSet = new Set(before.split("\n").filter(Boolean));
+  await run(`git stash push -u -m ${JSON.stringify(marker)} || true`);
+  const after = await capture(`git stash list --format="%gd:%gs"`);
+  const added = after
+    .split("\n")
+    .filter(Boolean)
+    .find((l) => !beforeSet.has(l) && l.includes(marker));
+  if (!added) return null;
+  return added.split(":")[0];
+}
+
+async function dropOrPopStash(ref: string, restore: boolean) {
+  if (!ref) return;
+  const cmd = restore
+    ? `git stash pop ${ref} || true`
+    : `git stash drop ${ref} || true`;
+  await run(cmd);
 }
 
 async function resumePending(): Promise<void> {
@@ -234,7 +304,9 @@ async function resumePending(): Promise<void> {
 
   if (remaining.length) {
     saveState(remaining);
-    console.warn(`Pending bump actions remain (${remaining.length}); rerun after providing tokens.`);
+    console.warn(
+      `Pending bump actions remain (${remaining.length}); rerun after providing tokens.`,
+    );
   } else {
     try {
       Deno.removeSync(join(Deno.cwd(), STATE_PATH));
@@ -252,14 +324,17 @@ async function updateManifest(manifest: Manifest, next: string) {
   }
 }
 
-export async function bumpAndRelease(level: Level, opts: BumpOptions = {}): Promise<void> {
+export async function bumpAndRelease(
+  level: Level,
+  opts: BumpOptions = {},
+): Promise<void> {
   await loadEnvFiles();
   await resumePending();
-  let stashed = false;
+  let stashRef: string | null = null;
+  let success = false;
 
   try {
-    await run("git stash push -u -m loru-bump-temp");
-    stashed = true;
+    stashRef = await pushStash();
 
     const configs = await collectWorkspaceConfigs();
     if (!configs.length) throw new Error("No loru.toml found");
@@ -296,7 +371,11 @@ export async function bumpAndRelease(level: Level, opts: BumpOptions = {}): Prom
 
     if (missing.length && !opts.fixMissing) {
       const details = missing
-        .map((m) => `- ${m.entry.name} (${m.entry.kind}): missing tag ${tagName(m.entry, m.manifest.version ?? "0.0.0")}`)
+        .map((m) =>
+          `- ${m.entry.name} (${m.entry.kind}): missing tag ${
+            tagName(m.entry, m.manifest.version ?? "0.0.0")
+          }`
+        )
         .join("\n");
       throw new Error(
         `Missing tags/releases for current versions:\n${details}\n` +
@@ -305,11 +384,17 @@ export async function bumpAndRelease(level: Level, opts: BumpOptions = {}): Prom
     }
 
     if (missing.length && opts.fixMissing) {
-      console.log("Backfilling missing tags/releases for current versions before bumping...");
+      console.log(
+        "Backfilling missing tags/releases for current versions before bumping...",
+      );
       for (const m of missing) {
         const last = await lastEntryTag(m.entry);
         const tag = tagName(m.entry, m.manifest.version ?? "0.0.0");
-        const changelog = await writeChangelog(m.entry, m.manifest.version ?? "0.0.0", last?.tag);
+        const changelog = await writeChangelog(
+          m.entry,
+          m.manifest.version ?? "0.0.0",
+          last?.tag,
+        );
         try {
           await run(`git tag ${tag}`);
           await run(`git push origin ${tag}`);
@@ -331,17 +416,27 @@ export async function bumpAndRelease(level: Level, opts: BumpOptions = {}): Prom
 
     if (!work.length) {
       console.log("No entries changed since last release.");
-      await run("git stash pop || true");
-      stashed = false;
+      if (stashRef) {
+        await dropOrPopStash(stashRef, true);
+        stashRef = null;
+      }
+      success = true;
       return;
     }
 
     const files = work.flatMap((w) => [w.manifest.path, w.changelog]);
     await run(`git add ${files.map((f) => JSON.stringify(f)).join(" ")}`);
-    const message = `chore: release ${work.map((w) => `${w.entry.id}@v${w.next}`).join(", ")}`;
+    const message = `chore: release ${
+      work.map((w) => `${w.entry.id}@v${w.next}`).join(", ")
+    }`;
     await run(`git commit -m ${JSON.stringify(message)}`);
 
-    const tags = work.map((w) => ({ entry: w.entry, tag: tagName(w.entry, w.next), changelog: w.changelog, version: w.next }));
+    const tags = work.map((w) => ({
+      entry: w.entry,
+      tag: tagName(w.entry, w.next),
+      changelog: w.changelog,
+      version: w.next,
+    }));
     for (const t of tags) {
       await run(`git tag ${t.tag}`);
     }
@@ -370,11 +465,14 @@ export async function bumpAndRelease(level: Level, opts: BumpOptions = {}): Prom
 
     if (pending.length) {
       saveState(pending);
-      throw new Error(`Some release steps deferred (${pending.length}). Provide tokens and rerun bump.`);
+      throw new Error(
+        `Some release steps deferred (${pending.length}). Provide tokens and rerun bump.`,
+      );
     }
+    success = true;
   } finally {
-    if (stashed) {
-      await run("git stash pop || true");
+    if (stashRef) {
+      await dropOrPopStash(stashRef, !success);
     }
   }
 }
@@ -399,7 +497,11 @@ export async function resumeReleases(opts: BumpOptions = {}): Promise<void> {
 
   if (missing.length && !opts.fixMissing) {
     const details = missing
-      .map((m) => `- ${m.entry.name} (${m.entry.kind}): missing tag ${tagName(m.entry, m.manifest.version ?? "0.0.0")}`)
+      .map((m) =>
+        `- ${m.entry.name} (${m.entry.kind}): missing tag ${
+          tagName(m.entry, m.manifest.version ?? "0.0.0")
+        }`
+      )
       .join("\n");
     throw new Error(
       `Missing tags/releases for current versions:\n${details}\n` +
@@ -434,6 +536,13 @@ export async function resumeReleases(opts: BumpOptions = {}): Promise<void> {
 
   if (pending.length) {
     saveState(pending);
-    throw new Error(`Some release steps deferred (${pending.length}). Provide tokens and rerun --resume.`);
+    throw new Error(
+      `Some release steps deferred (${pending.length}). Provide tokens and rerun --resume.`,
+    );
   }
 }
+
+// Internal utilities exposed for testing
+export const _pathSafeId = pathSafeId;
+export const _changelogPath = changelogPath;
+export const _writeChangelog = writeChangelog;

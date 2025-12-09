@@ -13,7 +13,7 @@ export interface FetchOptions {
   repo?: string; // default hiisi-digital/loru-schemas
 }
 
-const DEFAULT_VERSION = "0.3.3";
+const DEFAULT_VERSION = "0.3.4";
 const DEFAULT_CACHE = SCHEMA_CACHE_DIR;
 const DEFAULT_REPO = "hiisi-digital/loru-schemas";
 
@@ -30,7 +30,9 @@ function stripV(tag: string): string {
   return tag.startsWith("v") ? tag.slice(1) : tag;
 }
 
-async function readSchemaVersion(metaPath?: string): Promise<string | undefined> {
+async function readSchemaVersion(
+  metaPath?: string,
+): Promise<string | undefined> {
   if (!metaPath) return undefined;
   try {
     const text = await Deno.readTextFile(metaPath);
@@ -48,7 +50,9 @@ async function readSchemaVersion(metaPath?: string): Promise<string | undefined>
   }
 }
 
-async function discoverMetaFile(startDir = Deno.cwd()): Promise<string | undefined> {
+async function discoverMetaFile(
+  startDir = Deno.cwd(),
+): Promise<string | undefined> {
   let dir = startDir;
   while (true) {
     for (const candidate of CONFIG_FILES) {
@@ -65,12 +69,16 @@ async function discoverMetaFile(startDir = Deno.cwd()): Promise<string | undefin
 async function listTags(repo: string): Promise<string[]> {
   const tags: string[] = [];
   let page = 1;
-  const token = Deno.env.get("LORU_GITHUB_TOKEN") ?? Deno.env.get("GITHUB_TOKEN") ?? Deno.env.get("GH_TOKEN");
+  const token = Deno.env.get("LORU_GITHUB_TOKEN") ??
+    Deno.env.get("GITHUB_TOKEN") ?? Deno.env.get("GH_TOKEN");
 
   while (true) {
-    const res = await fetch(`https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}`,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      },
+    );
     if (!res.ok) break;
     const data = (await res.json()) as Array<{ name: string }>;
     if (!data.length) break;
@@ -80,7 +88,10 @@ async function listTags(repo: string): Promise<string[]> {
   return tags;
 }
 
-async function resolveVersion(range: string, repo: string): Promise<string | undefined> {
+async function resolveVersion(
+  range: string,
+  repo: string,
+): Promise<string | undefined> {
   // exact version shortcut
   if (!semver.isSemVer(range) && !semver.parseRange(range)) return undefined;
   const versions = (await listTags(repo))
@@ -96,17 +107,24 @@ async function resolveVersion(range: string, repo: string): Promise<string | und
 
   const parsed = semver.parseRange(range);
   if (!parsed) return undefined;
-  const matches = versions.filter((v) => semver.testRange(v, parsed)).sort(semver.compare);
+  const matches = versions.filter((v) => semver.testRange(v, parsed)).sort(
+    semver.compare,
+  );
   const latest = matches.at(-1);
   return latest ? semver.format(latest) : undefined;
 }
 
 function authHeaders() {
-  const token = Deno.env.get("LORU_GITHUB_TOKEN") ?? Deno.env.get("GITHUB_TOKEN");
+  const token = Deno.env.get("LORU_GITHUB_TOKEN") ??
+    Deno.env.get("GITHUB_TOKEN");
   return token ? { Authorization: `Bearer ${token}` } : undefined;
 }
 
-async function fetchSchemaFile(repo: string, version: string, schema: SchemaKind): Promise<string> {
+async function fetchSchemaFile(
+  repo: string,
+  version: string,
+  schema: SchemaKind,
+): Promise<string> {
   const urls = [
     `https://raw.githubusercontent.com/${repo}/v${version}/definitions/${schema}.json`,
     `https://raw.githubusercontent.com/${repo}/main/definitions/${schema}.json`,
@@ -115,16 +133,18 @@ async function fetchSchemaFile(repo: string, version: string, schema: SchemaKind
     const res = await fetch(url, { headers: authHeaders() });
     if (res.ok) return await res.text();
   }
-  throw new Error(`Failed to fetch schema ${schema} (version ${version}) from ${repo}`);
+  throw new Error(
+    `Failed to fetch schema ${schema} (version ${version}) from ${repo}`,
+  );
 }
 
 export async function fetchSchema(opts: FetchOptions): Promise<string> {
   const repo = opts.repo ?? DEFAULT_REPO;
   const metaPath = opts.metaFile ?? (await discoverMetaFile());
-  const versionOrRange = opts.version ?? (await readSchemaVersion(metaPath)) ?? DEFAULT_VERSION;
+  const versionOrRange = opts.version ?? (await readSchemaVersion(metaPath)) ??
+    DEFAULT_VERSION;
   const cacheDir = opts.cacheDir ?? DEFAULT_CACHE;
-  const resolvedVersion =
-    (await resolveVersion(versionOrRange, repo)) ??
+  const resolvedVersion = (await resolveVersion(versionOrRange, repo)) ??
     (semver.isSemVer(versionOrRange) ? versionOrRange : undefined) ??
     DEFAULT_VERSION;
 

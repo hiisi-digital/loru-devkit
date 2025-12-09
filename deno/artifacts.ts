@@ -44,7 +44,7 @@ export async function resolveArtifacts(
   projectRoot: string,
   tool: Tool,
   target?: string,
-): { workspaceRoot: string; artifactsRoot: string; toolDir: string } {
+): Promise<{ workspaceRoot: string; artifactsRoot: string; toolDir: string }> {
   const artifacts = pickArtifacts(cfg);
   const root = await basePath(cfg, workspaceRoot, projectRoot);
   const dirname = applyTemplate(artifacts.dirname ?? "builds/@tool", tool, target);
