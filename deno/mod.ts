@@ -16,3 +16,4 @@ export { bumpAndRelease } from "./release.ts";
 export { resumeReleases } from "./release.ts";
 export { initBuildSystem } from "./buildsys.ts";
 export { resolveArtifacts } from "./artifacts.ts";
+export { pascalCase, toSnake } from "./case.ts";

@@ -13,7 +13,7 @@ export interface FetchOptions {
   repo?: string; // default hiisi-digital/loru-schemas
 }
 
-const DEFAULT_VERSION = "0.3.4";
+const DEFAULT_VERSION = "0.3.5";
 const DEFAULT_CACHE = SCHEMA_CACHE_DIR;
 const DEFAULT_REPO = "hiisi-digital/loru-schemas";
 
@@ -33,6 +33,14 @@ function stripV(tag: string): string {
 function safeParse(tag: string): semver.SemVer | undefined {
   try {
     return semver.parse(tag);
+  } catch {
+    return undefined;
+  }
+}
+
+function safeParseRange(range: string): semver.Range | undefined {
+  try {
+    return semver.parseRange(range);
   } catch {
     return undefined;
   }
@@ -101,7 +109,8 @@ async function resolveVersion(
   repo: string,
 ): Promise<string | undefined> {
   // exact version shortcut
-  if (!semver.isSemVer(range) && !semver.parseRange(range)) return undefined;
+  const parsedRange = safeParseRange(range);
+  if (!semver.isSemVer(range) && !parsedRange) return undefined;
   const versions = (await listTags(repo))
     .map(stripV)
     .map((t) => safeParse(t))
@@ -113,11 +122,11 @@ async function resolveVersion(
     if (exact) return semver.format(exact);
   }
 
-  const parsed = semver.parseRange(range);
-  if (!parsed) return undefined;
-  const matches = versions.filter((v) => semver.testRange(v, parsed)).sort(
-    semver.compare,
-  );
+  if (!parsedRange) return undefined;
+  const matches = versions.filter((v) => semver.testRange(v, parsedRange))
+    .sort(
+      semver.compare,
+    );
   const latest = matches.at(-1);
   return latest ? semver.format(latest) : undefined;
 }

@@ -184,7 +184,7 @@ function buildEntryList(configs: WorkspaceConfig[]): Entry[] {
         id: lib.name,
         name: lib.name,
         baseDir: cfg.baseDir,
-        path: join(cfg.baseDir, lib.path),
+        path: join(cfg.baseDir, lib.path ?? "."),
         publish: lib.publish,
       });
     }
