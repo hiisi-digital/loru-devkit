@@ -11,7 +11,7 @@ Utilities for Loru tooling and metadata:
 
 ```bash
 # Fetch loru-config schema (reads schema_version from loru.toml)
-deno run -A https://raw.githubusercontent.com/hiisi-digital/loru-devkit/v0.3.0/deno/fetch_schema.ts \
+deno run -A https://raw.githubusercontent.com/hiisi-digital/loru-devkit/v0.3.2/deno/fetch_schema.ts \
   --schema=loru-config \
   --meta-file=loru.toml \
   --cache-dir=.loru/cache/schemas
@@ -29,7 +29,7 @@ The fetcher resolves semver ranges against tags in `loru-schemas`, caches the sc
 ## BOM fetcher
 
 ```bash
-deno run -A https://raw.githubusercontent.com/hiisi-digital/loru-devkit/v0.3.0/deno/fetch_bom.ts \
+deno run -A https://raw.githubusercontent.com/hiisi-digital/loru-devkit/v0.3.2/deno/fetch_bom.ts \
   --version=^0.1.0 \
   --cache-dir=.loru/cache/boms
 ```

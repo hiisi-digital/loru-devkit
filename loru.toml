@@ -1,22 +1,10 @@
 [meta]
-schema_version = "0.3.0"
+schema_version = "0.3.2"
 
 [[lib]]
 name = "@loru/devkit"
 path = "."
 kind = "deno"
-
-[[task]]
-name = "fmt"
-cmd = "deno fmt"
-
-[[task]]
-name = "lint"
-cmd = "deno lint"
-
-[[task]]
-name = "check"
-cmd = "deno fmt --check && deno lint"
 
 [[task]]
 name = "fetch-schema"

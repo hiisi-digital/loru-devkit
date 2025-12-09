@@ -2,6 +2,7 @@ import { join, relative } from "https://deno.land/std@0.208.0/path/mod.ts";
 import { parse as parseToml } from "https://deno.land/std@0.208.0/toml/mod.ts";
 import { collectWorkspaceConfigs } from "./workspace.ts";
 import { fileExists } from "./fs.ts";
+import { writeUserConfig } from "./user_config.ts";
 
 function writeJson(path: string, data: unknown) {
   return Deno.writeTextFile(path, `${JSON.stringify(data, null, 2)}\n`);
@@ -50,20 +51,19 @@ async function updateDenoConfig(projectDir: string, root: string) {
 async function updateCargoConfig(projectDir: string, root: string) {
   const cargoPath = join(projectDir, "Cargo.toml");
   if (!(await fileExists(cargoPath))) return;
-  const text = await Deno.readTextFile(cargoPath);
-  const parsed = parseToml(text) as Record<string, unknown>;
-  if (!parsed.build || typeof parsed.build !== "object" || Array.isArray(parsed.build)) {
-    parsed.build = {};
-  }
-  const targetDir = relative(projectDir, join(root, ".loru", "cache", "cargo-target"));
-  (parsed.build as Record<string, unknown>)["target-dir"] = targetDir;
-  await Deno.writeTextFile(cargoPath, stringifyToml(parsed));
+  // No longer mutating Cargo.toml for target-dir; rely on env (CARGO_TARGET_DIR) when running commands.
 }
 
 export async function initBuildSystem(startDir = Deno.cwd()) {
   const configs = await collectWorkspaceConfigs(startDir);
   if (!configs.length) throw new Error("No loru.toml found");
   const root = configs[0].baseDir;
+
+  const defaultArtifacts = (() => {
+    const stateHome = Deno.env.get("XDG_STATE_HOME") ?? join(Deno.env.get("HOME") ?? ".", ".local", "state");
+    return join(stateHome, "loru", "artifacts");
+  })();
+  await writeUserConfig({ artifacts_path: defaultArtifacts });
 
   for (const cfg of configs) {
     const candidateDirs = new Set<string>();

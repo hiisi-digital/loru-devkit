@@ -7,6 +7,9 @@ import { fileExists } from "./fs.ts";
 import { LoruConfig } from "@loru/schemas";
 
 type Level = "patch" | "minor" | "major";
+interface BumpOptions {
+  fixMissing?: boolean;
+}
 type ManifestKind = "deno" | "rust";
 
 interface Manifest {
@@ -249,8 +252,8 @@ async function updateManifest(manifest: Manifest, next: string) {
   }
 }
 
-export async function bumpAndRelease(level: Level): Promise<void> {
-  loadEnvFiles();
+export async function bumpAndRelease(level: Level, opts: BumpOptions = {}): Promise<void> {
+  await loadEnvFiles();
   await resumePending();
   let stashed = false;
 
@@ -262,6 +265,8 @@ export async function bumpAndRelease(level: Level): Promise<void> {
     if (!configs.length) throw new Error("No loru.toml found");
 
     const entries = buildEntryList(configs);
+    const missing: Array<{ entry: Entry; manifest: Manifest }> = [];
+    const pending: PendingAction[] = [];
     const work: Array<{
       entry: Entry;
       manifest: Manifest;
@@ -276,6 +281,10 @@ export async function bumpAndRelease(level: Level): Promise<void> {
       entry.manifest = manifest;
 
       const last = await lastEntryTag(entry);
+      const currentTag = tagName(entry, manifest.version ?? "0.0.0");
+      const hasCurrentTag = !!(await capture(`git tag --list "${currentTag}"`));
+      if (!hasCurrentTag) missing.push({ entry, manifest });
+
       const changed = await hasChangesSince(last?.tag, entry.path);
       if (!changed) continue;
 
@@ -283,6 +292,41 @@ export async function bumpAndRelease(level: Level): Promise<void> {
       await updateManifest(manifest, next);
       const changelog = await writeChangelog(entry, next, last?.tag);
       work.push({ entry, manifest, next, changelog, tag: last?.tag });
+    }
+
+    if (missing.length && !opts.fixMissing) {
+      const details = missing
+        .map((m) => `- ${m.entry.name} (${m.entry.kind}): missing tag ${tagName(m.entry, m.manifest.version ?? "0.0.0")}`)
+        .join("\n");
+      throw new Error(
+        `Missing tags/releases for current versions:\n${details}\n` +
+          "Tag manually or rerun with --fix-missing to backfill before bumping.",
+      );
+    }
+
+    if (missing.length && opts.fixMissing) {
+      console.log("Backfilling missing tags/releases for current versions before bumping...");
+      for (const m of missing) {
+        const last = await lastEntryTag(m.entry);
+        const tag = tagName(m.entry, m.manifest.version ?? "0.0.0");
+        const changelog = await writeChangelog(m.entry, m.manifest.version ?? "0.0.0", last?.tag);
+        try {
+          await run(`git tag ${tag}`);
+          await run(`git push origin ${tag}`);
+          await createRelease(tag, changelog);
+          await publishLib(m.entry, m.manifest.version ?? "0.0.0");
+        } catch (_err) {
+          pending.push({
+            entry: { kind: m.entry.kind, id: m.entry.id },
+            version: m.manifest.version ?? "0.0.0",
+            tag,
+            changelog,
+            publish: m.entry.publish,
+            commit: await capture("git rev-parse HEAD"),
+            path: m.entry.path,
+          });
+        }
+      }
     }
 
     if (!work.length) {
@@ -307,7 +351,6 @@ export async function bumpAndRelease(level: Level): Promise<void> {
       await run(`git push origin ${t.tag}`);
     }
 
-    const pending: PendingAction[] = [];
     for (const t of tags) {
       try {
         await createRelease(t.tag, t.changelog);
@@ -333,5 +376,64 @@ export async function bumpAndRelease(level: Level): Promise<void> {
     if (stashed) {
       await run("git stash pop || true");
     }
+  }
+}
+
+export async function resumeReleases(opts: BumpOptions = {}): Promise<void> {
+  await loadEnvFiles();
+  await resumePending();
+
+  const configs = await collectWorkspaceConfigs();
+  if (!configs.length) throw new Error("No loru.toml found");
+  const entries = buildEntryList(configs);
+
+  const missing: Array<{ entry: Entry; manifest: Manifest }> = [];
+  for (const entry of entries) {
+    const manifest = entry.manifest ?? (await detectManifest(entry.path));
+    if (!manifest) continue;
+    entry.manifest = manifest;
+    const tag = tagName(entry, manifest.version ?? "0.0.0");
+    const hasTag = !!(await capture(`git tag --list "${tag}"`));
+    if (!hasTag) missing.push({ entry, manifest });
+  }
+
+  if (missing.length && !opts.fixMissing) {
+    const details = missing
+      .map((m) => `- ${m.entry.name} (${m.entry.kind}): missing tag ${tagName(m.entry, m.manifest.version ?? "0.0.0")}`)
+      .join("\n");
+    throw new Error(
+      `Missing tags/releases for current versions:\n${details}\n` +
+        "Tag manually or rerun with --resume --fix-missing to backfill without bumping.",
+    );
+  }
+
+  const pending: PendingAction[] = [];
+
+  for (const m of missing) {
+    const last = await lastEntryTag(m.entry);
+    const version = m.manifest.version ?? "0.0.0";
+    const tag = tagName(m.entry, version);
+    const changelog = await writeChangelog(m.entry, version, last?.tag);
+    try {
+      await run(`git tag ${tag}`);
+      await run(`git push origin ${tag}`);
+      await createRelease(tag, changelog);
+      await publishLib(m.entry, version);
+    } catch (_err) {
+      pending.push({
+        entry: { kind: m.entry.kind, id: m.entry.id },
+        version,
+        tag,
+        changelog,
+        publish: m.entry.publish,
+        commit: await capture("git rev-parse HEAD"),
+        path: m.entry.path,
+      });
+    }
+  }
+
+  if (pending.length) {
+    saveState(pending);
+    throw new Error(`Some release steps deferred (${pending.length}). Provide tokens and rerun --resume.`);
   }
 }

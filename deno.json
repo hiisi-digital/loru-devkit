@@ -1,6 +1,6 @@
 {
   "name": "@loru/devkit",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "exports": {
     ".": "./deno/mod.ts"
   },
@@ -9,7 +9,7 @@
   },
   "imports": {
     "std/": "https://deno.land/std@0.208.0/",
-    "@loru/schemas": "../loru-schemas/typescript/mod.ts"
+    "@loru/schemas": "https://raw.githubusercontent.com/hiisi-digital/loru-schemas/v0.3.2/typescript/mod.ts"
   },
   "lock": {
     "path": ".loru/deno.lock"
